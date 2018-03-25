@@ -1,0 +1,56 @@
+function pvalsOut = medianPvals(pvals,varargin)
+% Takes a pvals array and turns into a single set of parameter values by
+% computing the median for each element in pvals.  This function will
+% automatically chop off the first 500 values as burn-in.  The user can
+% specify another burn-in value
+
+% assume burn in is 500 unless specified in the call which is of the
+% form medianPvals(pout,'burn',1000);
+burn = 500;
+outfile = 'params.dat';
+for ii=1:2:length(varargin)
+  switch varargin{ii}
+  case 'burn'
+    burn=varargin{ii+1};
+  case 'outfile';
+    outfile = varargin{ii+1};
+    writeOut=1;
+  otherwise
+    error('invalid extended argument passed to cosmoPlots');
+  end
+end
+
+% now remove the burnin (burn:end)
+pvals = pvals(burn:end);
+pvalsOut = pvals(end);
+
+% Compute point estimates for each parameter.
+pvalsOut.theta = median([pvals.theta],2);
+pvalsOut.betaV = median([pvals.betaV],2);
+pvalsOut.betaU = median([pvals.betaU],2);
+
+pvalsOut.lamVz = median([pvals.lamVz],2);
+pvalsOut.lamUz = median([pvals.lamUz],2);
+pvalsOut.betaU = median([pvals.betaU],2);
+pvalsOut.betaU = median([pvals.betaU],2);
+pvalsOut.betaU = median([pvals.betaU],2);
+pvalsOut.betaU = median([pvals.betaU],2);
+
+
+v = [v, median([pout.pvals.betaU],2)'];
+
+% lamws
+v = [v, median([pout.pvals.lamWs],2)'];
+
+% lamz
+v = [v, median([pout.pvals.lamUz],2)'];
+
+% mean
+for i=1:4
+    v = [v, pout.simData.orig.ymean(:,i)'];
+end
+
+v = [v, kron(pout.simData.orig.ysd, ones(1,1099))];
+
+v = [length(v), v];
+save(outfile,'v', '-ASCII');
