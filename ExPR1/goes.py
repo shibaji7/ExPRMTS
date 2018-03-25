@@ -230,7 +230,7 @@ def read_goes(sdate,edate=None,sat_nr="15",is_high_res=False):
 	    response = urllib2.urlopen(f)
 	    if response.getcode() == 200: 
 		nc_data = response.read()
-		f_path = os.path.join(tmp_dir + FILES[indx])
+		f_path = os.path.join(tmp_dir + "/" + FILES[indx])
 		f_paths.append(f_path)
 		with open(f_path,"w") as code:
 		    code.write(nc_data)

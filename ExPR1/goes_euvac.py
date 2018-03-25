@@ -111,7 +111,7 @@ class EstimateIonization(object):
 
     def __estimate_photo_ionization(self, e_time, Hp, z, sza, etap=None):
         xe = self.prod[np.where(self.T == e_time)][0]
-        if etap is None or etap < 1.:
+        if etap is None or etap <= 1.:
             eta = 0.
             for sps in self.euvac_config["species"]:
                 eta = eta + np.array(self.euvac_config[sps]["eta"],dtype=np.float)[self.bin_num]

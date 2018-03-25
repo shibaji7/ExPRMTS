@@ -84,7 +84,9 @@ def __abs_model(args):
     	fname = "out/"+args[3]+"/attn_%s.csv"%(args[0])
         print fname
         pass
+    print etap
     dn = conf["dn"] - dt.timedelta(minutes=10)
+    #dn = dt.datetime(2015,03,11,16,17)
     dates = [dn + dt.timedelta(minutes=x) for x in range(90)]
     for I,ut in enumerate(dates):
         __non_magnetic_attn_model_1P(ut,lat,lon,freq,code,etap,alphas,hrefs,bins,I,fname)

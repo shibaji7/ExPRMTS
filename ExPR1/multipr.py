@@ -9,8 +9,9 @@ import datetime as dt
 np.random.seed(0)
 X = []
 L = 101
+au, al = 4.0, 0.5
 if not os.path.exists("design.csv"):
-    Bins = np.linspace(3,10,L)
+    Bins = np.linspace(au,al,L)
     for i in range(L-1):
         X.append(np.random.uniform(Bins[i],Bins[i+1],1)[0])
         pass
