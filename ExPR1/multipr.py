@@ -20,7 +20,7 @@ if not os.path.exists("design.csv"):
     df.to_csv("design.csv",index=False)
     pass
 
-riom = "mea"
+riom = "gill"
 RM = pd.read_csv("rio.csv")
 rm = RM[RM.code==riom]
 lat = rm["lat"]
