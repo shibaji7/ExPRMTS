@@ -1,1 +1,1 @@
-rm *.png *.log *.pyc
+rm *.log *.pyc

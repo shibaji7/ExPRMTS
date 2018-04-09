@@ -6,21 +6,8 @@ import sza_calc as szac
 import numpy as np
 import datetime as dt
 
-np.random.seed(0)
-X = []
-L = 101
-au, al = 4.0, 0.5
-if not os.path.exists("design.csv"):
-    Bins = np.linspace(au,al,L)
-    for i in range(L-1):
-        X.append(np.random.uniform(Bins[i],Bins[i+1],1)[0])
-        pass
-    df = pd.DataFrame()
-    df["alpha"] = X
-    df.to_csv("design.csv",index=False)
-    pass
 
-riom = "brd"
+riom = "ott"
 RM = pd.read_csv("rio.csv")
 rm = RM[RM.code==riom]
 lat = rm["lat"]
@@ -34,14 +21,13 @@ dirc = "out/" + riom
 if os.path.exists(dirc): shutil.rmtree(dirc)
 os.mkdir(dirc)
 
-def run_code(l):
-    cmd = "python model.py %.15f %.2f %.2f %s" % (float(l[0]),lat, lon, riom)
+def run_code(i):
+    cmd = "python model.py %d %.2f %.2f %s %s" % (i ,lat, lon, riom, rm["code"].tolist()[0])
     print cmd
-    os.system(cmd)
+    #os.system(cmd)
     return
 
-D = pd.read_csv("design.csv")
-d = D.as_matrix()
+D = range(100)
 
 pool = mpr.Pool(10)
-pool.map(run_code, d)
+pool.map(run_code, D)

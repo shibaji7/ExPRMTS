@@ -6,14 +6,35 @@ import json
 from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 import pyglow
+import scale_height as SHC
+
+import alpha as alp
+import swf_util as SU
+from swf_util import SCO
+import sza_calc as SZAC
+
+
+def get_sco(geo, I):
+    sco = SCO()
+    sco.msis["Tn"] = geo.msis["Tn"][I,:]
+    sco.msis["rho"] = geo.msis["rho"][I,:]
+    sco.msis["AR"] = geo.msis["AR"][I,:]
+    sco.msis["H"] = geo.msis["H"][I,:]
+    sco.msis["HE"] = geo.msis["HE"][I,:]
+    sco.msis["N"] = geo.msis["N"][I,:]
+    sco.msis["N2"] = geo.msis["N2"][I,:]
+    sco.msis["O"] = geo.msis["O"][I,:]
+    sco.msis["O2"] = geo.msis["O2"][I,:]
+    sco.msis["O_anomalous"] = geo.msis["O_anomalous"][I,:]
+    sco.msis["nn"] = geo.msis["nn"][I,:]
+    return sco
 
 class EuvacModel(object):
 
-    def __init__(self, goes_data_file, bin_num = 1, goes_tags=["A_AVG","B_AVG"]):
+    def __init__(self, goes_data_file, goes_tags=["A_AVG","B_AVG"]):
         self.goes_data_file = goes_data_file
         self.goes = pd.read_csv(goes_data_file)
         self.goes.dt = pd.to_datetime(self.goes.dt)
-        self.bin_num = bin_num
         self.goes_tags = goes_tags
         with open("euvac.json","r") as code: self.euvac_config = json.load(code)
         self.lam_l = (1e-9 * np.array(self.euvac_config["lambda_l"]))
@@ -37,7 +58,8 @@ class EuvacModel(object):
         E = self.__create_norm_euvac_model(X)
         XE = np.concatenate((X, E), axis=1)
         T = np.array([t.to_pydatetime() for t in self.goes.dt])
-        production = XE[:,self.bin_num]
+        #production = XE[:,self.bin_num]
+        production = XE
         return production, T
 
     def __create_norm_euvac_model(self,xx):
@@ -98,29 +120,59 @@ class EuvacModel(object):
         return solspec
 
 
-class EstimateIonization(object):
 
-    def __init__(self, alts, goes_data_file, bin_num = 1, model = None):
+class EstimateIonizationRate(object):
+
+    def __init__(self, alts, goes_data_file, stime, etime, geo, bins=[1,2]):
         self.alts = alts
         self.goes_data_file = goes_data_file
-        self.bin_num = bin_num
-        if not model: model = EuvacModel(goes_data_file, bin_num)
-        self.prod, self.T = model.exe()
+        self.model = EuvacModel(goes_data_file)
+        self.stime = stime
+        self.etime = etime
+        self.__map_list()
+        self.geo = geo
+        self.bins = bins
         with open("euvac.json","r") as code: self.euvac_config = json.load(code)
+        self.height_time_dne_df = pd.DataFrame()
+        self.height_time_dne_df["dt"] = self.df_high_res["dt"]
+        for h in self.alts: self.height_time_dne_df["alt_"+str(int(h))] = np.zeros(len(self.df_high_res["dt"]))
         return
 
-    def __estimate_photo_ionization(self, e_time, Hp, z, sza, etap=None):
-        xe = self.prod[np.where(self.T == e_time)][0]
-        if etap is None or etap <= 1.:
-            eta = 0.
-            for sps in self.euvac_config["species"]:
-                eta = eta + np.array(self.euvac_config[sps]["eta"],dtype=np.float)[self.bin_num]
-                pass
-            eta = eta / len(self.euvac_config["species"])
-            if etap is not None: eta = eta * etap
-        else:
-            eta = etap
-        self.dQ = self.__estimate_iono_h0(xe, Hp, eta, sza, z)
+    def __map_list(self):
+        df = self.model.goes
+        prod, T = self.model.exe()
+        for i in range(prod.shape[1]):
+           df["bin_"+str(i+1)] = prod[:,i]
+           pass
+        df = df.sort_values(by="dt")
+        df = df[(df.dt>=self.stime) & (df.dt<self.etime)]
+        df.indx = [i*60 for i in range(len(df))]
+        self.df = df
+        
+        self.ds = 10.
+        d = (self.etime-self.stime).total_seconds()/self.ds
+        Tp = np.array([self.stime+dt.timedelta(seconds=self.ds*i) for i in range(int(d))])
+        self.df_high_res = pd.DataFrame()
+        self.df_high_res["dt"] = Tp
+        L = len(Tp)
+        keys = ["A_AVG","B_AVG"]
+        for i in range(37): keys.append("bin_"+str(i+1))
+        for k in keys:
+            f_x = alp.get_extrp_func(df.indx,df[k])
+            self.df_high_res[k] = f_x(np.arange(L)*self.ds)
+            pass
+        return
+
+    def __get_eta(self, bin_num):
+        eta = 0.
+        for sps in self.euvac_config["species"]: eta = eta + np.array(self.euvac_config[sps]["eta"],dtype=np.float)[bin_num]
+        eta = eta / len(self.euvac_config["species"])
+        return eta
+
+    def __estimate_photo_ionization(self, e_time, Hp, z, sza, bin):
+        xe = self.df_high_res[self.df_high_res.dt == e_time]["bin_"+str(bin)].tolist()[0]
+        self.dQ = 0.
+        self.dQ = self.__estimate_iono_h0(xe, Hp, sza, z, bin-1)
         return
 
     def __chapman_function(self, z, sza):
@@ -128,23 +180,58 @@ class EstimateIonization(object):
         else: n_Ne = np.exp(1-z-(np.exp(-z)/np.cos(np.deg2rad(sza))))
         return n_Ne
 
-    def __estimate_ionization(self, e_time, Hp, z, sza):
-        self.dQ = 0.0
-        xe = self.prod[np.where(self.T == e_time)][0]
-        for sps in self.euvac_config["species"]:
-            eta = np.array(self.euvac_config[sps]["eta"],dtype=np.float)[self.bin_num]
-            self.dQ = self.dQ + self.__estimate_iono_h0(xe, Hp, eta, sza, z)
-            pass
-        return
-
-    def __estimate_iono_h0(self, xe, Hp, eta, sza, z):
+    def __estimate_iono_h0(self, xe, Hp, sza, z, bin):
         n_Ne = self.__chapman_function(z, sza)
-        q = (n_Ne * xe * eta  / (Hp * np.exp(1)))
+        eta = self.__get_eta(bin)
+        q = (n_Ne[0] * xe * eta  / (Hp[0] * np.exp(1)))
         return q
 
-    def exe(self, e_time, h, h0, Hp, sza, eta=None):
-        self.I, = np.where( self.alts==h )
+    def __exe(self, e_time, h, h0, Hp, sza, bin):
         z = (h - h0) / Hp
-        self.__estimate_photo_ionization(e_time, Hp, z, sza, eta)
-        #self.__estimate_ionization(e_time, Hp, z, sza)
+        self.__estimate_photo_ionization(e_time, Hp, z, sza, bin)
         return self.dQ * 1e-6
+
+    def __execute_T(self,ut,lat,lon):
+        deltaNe_h = []
+        print ut
+        for h in self.alts:
+            dNe = 0.
+            sza = SZAC.get_sza_as_deg(ut, lat, lon, h)
+            for bin in self.bins:
+                Hp, h0 = SHC.get_h0_Hp(self.sco.alts,self.sco.msis,h,bin_num=bin)
+                dNe = dNe + self.__exe(ut,h,h0,Hp,sza,bin)
+                pass
+            deltaNe_h.append(dNe)
+            pass
+        deltaNe_h = np.array(deltaNe_h)
+        return deltaNe_h
+
+    def __calc_grad(self):
+        print len(self.height_time_dne_df)
+        for i in range(len(self.alts)):
+            y = self.height_time_dne_df["alt_"+str(int(self.alts[i]))]
+            self.height_time_dne_df["grd_"+str(int(self.alts[i]))] = np.gradient(y)/self.ds
+        return
+
+    def execu(self,lat,lon):
+        deltaNe_T = []
+        for I,ut in enumerate(self.df_high_res["dt"]):
+            self.sco = get_sco(self.geo,I)
+            deltaNe_h = self.__execute_T(ut,lat,lon)
+            deltaNe_T.append(deltaNe_h)
+            #break
+            pass
+        deltaNe_T = np.transpose(np.array(deltaNe_T))*1.e6
+        #print deltaNe_T.shape,len(deltaNe_T), self.height_time_dne_df.as_matrix().shape
+        for i in range(len(deltaNe_T)):
+            self.height_time_dne_df["alt_"+str(int(self.alts[i]))] = deltaNe_T[i,:]
+        self.out = self.height_time_dne_df
+        #self.__calc_grad()
+        return self.height_time_dne_df, self.df_high_res
+
+
+def estimate_delta_Ne(lat, lon, stime, etime, geo, alts=SU.get_alts()):
+    goes_data_file = "Data/%s.csv"%stime.strftime("%Y-%m-%d")
+    eir = EstimateIonizationRate(alts, goes_data_file, stime, etime, geo)
+    eir.execu(lat,lon)
+    return eir
