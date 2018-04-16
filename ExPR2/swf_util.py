@@ -290,7 +290,7 @@ class Absorption_AH(object):
 
 
 
-def plot_summary(stime,etime,geo,EIR,fname,code,alts=[70,71,72],colors=["r-.","b-.","k-."]):
+def plot_summary(stime,etime,geo,EIR,fname,code,alts=[80,83,86],colors=["r-.","b-.","k-."]):
     fmt = matplotlib.dates.DateFormatter("%H:%M")
     fig,axes = plt.subplots(figsize=(15,9),nrows=4)
     fig.subplots_adjust(hspace=0.5)
